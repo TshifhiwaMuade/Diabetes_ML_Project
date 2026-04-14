@@ -1,17 +1,46 @@
-import os
+from pathlib import Path
+
 import pandas as pd
 import matplotlib.pyplot as plt
 from docx import Document
 from docx.shared import Inches
 
-# CREATE FOLDERS
-os.makedirs("processed", exist_ok=True)
-os.makedirs("reports", exist_ok=True)
-os.makedirs("reports/figures", exist_ok=True)
+
+BASE_DIR = Path(__file__).resolve().parent
+
+# Prefer the recommended project structure first: data/raw and data/processed.
+RAW_DIR = BASE_DIR / "data" / "raw"
+PROCESSED_DIR = BASE_DIR / "data" / "processed"
+
+# Fallbacks for older/local layouts.
+if not RAW_DIR.exists() and (BASE_DIR / "raw").exists():
+    RAW_DIR = BASE_DIR / "raw"
+
+if not PROCESSED_DIR.exists() and (BASE_DIR / "processed").exists():
+    PROCESSED_DIR = BASE_DIR / "processed"
+
+REPORTS_DIR = BASE_DIR / "reports"
+FIGURES_DIR = REPORTS_DIR / "figures"
+
+RAW_FILE = RAW_DIR / "Diabetes_and_LifeStyle_Dataset_.csv"
+if not RAW_FILE.exists() and (BASE_DIR / "Diabetes_and_LifeStyle_Dataset_.csv").exists():
+    RAW_FILE = BASE_DIR / "Diabetes_and_LifeStyle_Dataset_.csv"
+
+if not RAW_FILE.exists():
+    raise FileNotFoundError(
+        f"Dataset not found. Expected one of: "
+        f"{BASE_DIR / 'data' / 'raw' / 'Diabetes_and_LifeStyle_Dataset_.csv'} or "
+        f"{BASE_DIR / 'raw' / 'Diabetes_and_LifeStyle_Dataset_.csv'}"
+    )
+
+PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+FIGURES_DIR.mkdir(parents=True, exist_ok=True)
 
 # LOAD DATA
-df = pd.read_csv("raw/Diabetes_and_LifeStyle_Dataset_.csv")
+df = pd.read_csv(RAW_FILE)
 
+print("Resolved dataset path:", RAW_FILE)
 print("Shape:", df.shape)
 print("\nColumns:")
 print(df.columns.tolist())
@@ -65,6 +94,20 @@ clinical_features = [
 
 target_feature = "diabetes_stage"
 
+expected_columns = (
+    demographic_features
+    + lifestyle_features
+    + medical_history_features
+    + clinical_features
+    + [target_feature]
+)
+missing_expected_columns = [col for col in expected_columns if col not in df.columns]
+if missing_expected_columns:
+    raise KeyError(
+        "The following expected columns were not found in the dataset: "
+        + ", ".join(missing_expected_columns)
+    )
+
 print("\nDemographic features:", demographic_features)
 print("\nLifestyle features:", lifestyle_features)
 print("\nMedical history features:", medical_history_features)
@@ -113,7 +156,7 @@ for col in key_features:
     plt.title(f"Boxplot of {col}")
     plt.xlabel(col)
     plt.tight_layout()
-    plt.savefig(f"reports/figures/{col}_boxplot.png")
+    plt.savefig(FIGURES_DIR / f"{col}_boxplot.png")
     plt.close()
 
 # OUTLIER ANALYSIS
@@ -185,10 +228,15 @@ print(cols_to_drop)
 print("\nRemaining columns in modelling dataset:")
 print(df_clean_model.columns.tolist())
 
-df_clean_full.to_csv("processed/cleaned_full_dataset.csv", index=False)
-df_clean_model.to_csv("processed/cleaned_model_dataset.csv", index=False)
+clean_full_path = PROCESSED_DIR / "cleaned_full_dataset.csv"
+clean_model_path = PROCESSED_DIR / "cleaned_model_dataset.csv"
+
+df_clean_full.to_csv(clean_full_path, index=False)
+df_clean_model.to_csv(clean_model_path, index=False)
 
 print("\nDatasets saved successfully.")
+print("Saved full cleaned dataset to:", clean_full_path)
+print("Saved modelling dataset to:", clean_model_path)
 
 
 # WORD DOCUMENT HELPERS
@@ -218,7 +266,6 @@ def add_dataframe_table(doc, dataframe, title=None, max_rows=None):
 def add_bullet_list(doc, items):
     for item in items:
         doc.add_paragraph(str(item), style="List Bullet")
-
 
 
 # CREATE WORD DOCUMENT
@@ -314,10 +361,10 @@ doc.add_paragraph(
 )
 
 for col in key_features:
-    image_path = f"reports/figures/{col}_boxplot.png"
-    if os.path.exists(image_path):
+    image_path = FIGURES_DIR / f"{col}_boxplot.png"
+    if image_path.exists():
         doc.add_heading(f"Boxplot: {col}", level=3)
-        doc.add_picture(image_path, width=Inches(6))
+        doc.add_picture(str(image_path), width=Inches(6))
 
 # Leakage checks
 doc.add_heading("7. Leakage Checks and Handoff Notes", level=2)
@@ -367,7 +414,7 @@ doc.add_paragraph(
 )
 
 # Save Word document
-word_output_path = "reports/Nicholas_Data_Understanding_Preparation_Evidence.docx"
+word_output_path = REPORTS_DIR / "Nicholas_Data_Understanding_Preparation_Evidence.docx"
 doc.save(word_output_path)
 
 print(f"\nWord document saved successfully: {word_output_path}")
