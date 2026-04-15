@@ -1,12 +1,11 @@
 from pathlib import Path
-
 import pandas as pd
 import matplotlib.pyplot as plt
 from docx import Document
 from docx.shared import Inches
 
-
-BASE_DIR = Path(__file__).resolve().parent
+# FIXED: Go up two levels to reach the project root directory
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Prefer the recommended project structure first: data/raw and data/processed.
 RAW_DIR = BASE_DIR / "data" / "raw"
@@ -101,6 +100,7 @@ expected_columns = (
     + clinical_features
     + [target_feature]
 )
+
 missing_expected_columns = [col for col in expected_columns if col not in df.columns]
 if missing_expected_columns:
     raise KeyError(
@@ -148,7 +148,6 @@ key_feature_stats = df[key_features].describe(
 print("\nDetailed statistics for key features:")
 print(key_feature_stats)
 
-
 # BOXPLOTS
 for col in key_features:
     plt.figure(figsize=(8, 4))
@@ -189,7 +188,6 @@ outlier_df = pd.DataFrame(outlier_summary)
 print("\nIQR Outlier Summary:")
 print(outlier_df)
 
-
 # TARGET LEAKAGE CHECKS
 diagnosed_crosstab = pd.crosstab(df["diagnosed_diabetes"], df["diabetes_stage"])
 diagnosed_crosstab_pct = pd.crosstab(
@@ -208,7 +206,6 @@ print(diagnosed_crosstab_pct)
 
 print("\nAverage diabetes_risk_score by diabetes_stage")
 print(risk_score_by_stage)
-
 
 # CLEANED DATASETS
 df_clean_full = df.copy()
@@ -238,7 +235,6 @@ print("\nDatasets saved successfully.")
 print("Saved full cleaned dataset to:", clean_full_path)
 print("Saved modelling dataset to:", clean_model_path)
 
-
 # WORD DOCUMENT HELPERS
 def add_dataframe_table(doc, dataframe, title=None, max_rows=None):
     if title:
@@ -262,11 +258,9 @@ def add_dataframe_table(doc, dataframe, title=None, max_rows=None):
 
     doc.add_paragraph("")
 
-
 def add_bullet_list(doc, items):
     for item in items:
         doc.add_paragraph(str(item), style="List Bullet")
-
 
 # CREATE WORD DOCUMENT
 doc = Document()
