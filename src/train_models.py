@@ -109,18 +109,6 @@ for name, (model, Xt, yt) in models.items():
     })
 
 results_df = pd.DataFrame(results).sort_values('F1 (weighted)', ascending=False)
-print(results_df)
-
-#  Ploting Confusion Matrices for all Three Models
-
-fig, axes = plt.subplots(1, 3, figsize=(18, 5))
-for ax, (name, (model, Xt, yt)) in zip(axes, models.items()):
-    cm = confusion_matrix(yt, model.predict(Xt))
-    disp = ConfusionMatrixDisplay(cm)
-    disp.plot(ax=ax, colorbar=False, cmap='Blues')
-    ax.set_title(name)
-plt.tight_layout()
-plt.show()
 
 #  Determining Best Model
 
@@ -141,7 +129,6 @@ preds_df = pd.DataFrame({
     'y_pred_xgb': xgb_preds
 })
 preds_df.to_csv('artifacts/predictions.csv', index=False)
-print(preds_df.head())
 
 #  Feature Importance from all 3 Models
 
@@ -167,4 +154,3 @@ plt.show()
 for name, preds in [('DT', dt_preds), ('RF', rf_preds), ('XGB', xgb_preds)]:
     acc = accuracy_score(y_test, preds)
     f1  = f1_score(y_test, preds, average='weighted')
-    print(f"{name}  Accuracy: {acc:.4f}  F1: {f1:.4f}")
