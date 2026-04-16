@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
@@ -6,14 +6,18 @@ from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 
-# create artifacts folder if it does not exist
-os.makedirs("artifacts", exist_ok=True)
+# paths
+BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_PATH = BASE_DIR / "data" / "processed" / "cleaned_model_dataset.csv"
+ARTIFACTS_DIR = BASE_DIR / "artifacts"
+FIGURES_DIR = BASE_DIR / "reports" / "figures"
 
-# create figures folder if it does not exist
-os.makedirs("reports/figures", exist_ok=True)
+# create output folders if they do not exist
+ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
+FIGURES_DIR.mkdir(parents=True, exist_ok=True)
 
 # load dataset
-df = pd.read_csv("data/processed/cleaned_model_dataset.csv")
+df = pd.read_csv(DATA_PATH)
 
 # select clustering features
 selected_features = [
@@ -70,7 +74,7 @@ cluster_labels = pd.DataFrame({
     "cluster": clusters
 })
 cluster_labels["cluster_name"] = cluster_labels["cluster"].map(cluster_names)
-cluster_labels.to_csv("artifacts/cluster_labels.csv", index=False)
+cluster_labels.to_csv(ARTIFACTS_DIR / "cluster_labels.csv", index=False)
 
 # create cluster profiles
 df_profiles = df[selected_features].copy()
@@ -79,7 +83,7 @@ df_profiles["cluster_name"] = df_profiles["cluster"].map(cluster_names)
 cluster_profiles = df_profiles.groupby(["cluster", "cluster_name"]).mean()
 
 # save profiles
-cluster_profiles.to_csv("artifacts/cluster_profiles.csv")
+cluster_profiles.to_csv(ARTIFACTS_DIR / "cluster_profiles.csv")
 
 # print profiles
 print("\ncluster profiles:")
@@ -91,5 +95,5 @@ scatter = plt.scatter(X_pca[:, 0], X_pca[:, 1], c=clusters)
 plt.title("patient clusters (pca projection)")
 plt.xlabel("pca 1")
 plt.ylabel("pca 2")
-plt.savefig("reports/figures/cluster_pca.png")
+plt.savefig(FIGURES_DIR / "cluster_pca.png")
 plt.close()
