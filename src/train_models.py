@@ -154,3 +154,5 @@ plt.show()
 for name, preds in [('DT', dt_preds), ('RF', rf_preds), ('XGB', xgb_preds)]:
     acc = accuracy_score(y_test, preds)
     f1  = f1_score(y_test, preds, average='weighted')
+
+#Handoff notes for Shap Analysis. The best model was dtermined to be XGBoost with an accuracy rating of 91.35%
