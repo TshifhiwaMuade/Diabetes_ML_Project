@@ -11,23 +11,21 @@ SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.path.dirname(SRC_DIR)
 
 model = joblib.load(os.path.join(BASE_DIR, 'artifacts', 'model_xgb.pkl'))
-#shap_data = pd.read_csv(os.path.join(BASE_DIR, 'artifacts', 'shap_values.csv'))
 preprocessor = joblib.load(os.path.join(BASE_DIR, 'artifacts', 'preprocessor.pkl'))
 cluster_profiles = pd.read_csv(os.path.join(BASE_DIR, 'artifacts', 'cluster_profiles.csv'))
 
 data_paths = [
     os.path.join(BASE_DIR, 'data', 'raw', 'Diabetes_and_LifeStyle_Dataset_.csv'),
     os.path.join(BASE_DIR, 'data', 'processed', 'Diabetes_and_LifeStyle_Dataset_.csv'),
-    os.path.join(BASE_DIR, 'data', 'raw', 'Diabetes_and_LifeStyle_Dataset.csv'),  
+    os.path.join(BASE_DIR, 'data', 'raw', 'Diabetes_and_LifeStyle_Dataset.csv'),
     os.path.join(BASE_DIR, 'data', 'processed', 'Diabetes_and_LifeStyle_Dataset.csv'),
-    os.path.join(BASE_DIR, 'data', 'raw', '*.csv'), 
-    os.path.join(BASE_DIR, 'data', 'processed', '*.csv'),  
+    os.path.join(BASE_DIR, 'data', 'raw', '*.csv'),
+    os.path.join(BASE_DIR, 'data', 'processed', '*.csv'),
 ]
 
 data_path = None
 for path in data_paths:
     if '*' in path:
-       
         import glob
         files = glob.glob(path)
         if files:
@@ -40,7 +38,6 @@ for path in data_paths:
         break
 
 if data_path is None:
- 
     raw_dir = os.path.join(BASE_DIR, 'data', 'raw')
     processed_dir = os.path.join(BASE_DIR, 'data', 'processed')
     print(f"\nFiles in data/raw/: {os.listdir(raw_dir) if os.path.exists(raw_dir) else 'N/A'}")
@@ -64,6 +61,15 @@ STAGE_COLORS = {
     'Gestational':  '#7c3aed',
 }
 
+# ── Risk Level Mapping ─────────────────────────────────────────────────────────
+RISK_LEVELS = {
+    'No Diabetes':  ('Low',       '#16a34a'),
+    'Pre-Diabetes': ('Medium',    '#d97706'),
+    'Type 2':       ('High',      '#dc2626'),
+    'Type 1':       ('Very High', '#ea580c'),
+    'Gestational':  ('High',      '#7c3aed'),
+}
+
 app = Dash(
     __name__,
     external_stylesheets=[dbc.themes.BOOTSTRAP],
@@ -84,47 +90,47 @@ def generate_description(pred_label, cluster_name, bmi, hba1c, glucose_fasting,
     elif pred_label == 'Type 1':
         lines = ["The prediction points toward Type 1 diabetes. Unlike Type 2, this is autoimmune in nature and isn't caused by lifestyle — insulin therapy is typically needed."]
     elif pred_label == 'Gestational':
-        lines = ["Some indicators associated with gestational diabetes are present. This is worth taking seriously given the implications during pregnancy, so close monitoring is ."]
+        lines = ["Some indicators associated with gestational diabetes are present. This is worth taking seriously given the implications during pregnancy, so close monitoring is recommended."]
     else:
         lines = ["A risk classification has been made based on the data provided."]
-    
+
     if cluster_name == 'Active & Healthy':
         lines.append("On the lifestyle side, things look good. The activity levels and general habits are a positive sign.")
     elif cluster_name == 'Sedentary Risk':
         lines.append("The lifestyle concerns. Low activity and sedentary patterns are one of the bigger drivers of metabolic risk.")
     else:
         lines.append("Lifestyle-wise, things are somewhere in the middle — okay but definitely room for improvement.")
-    
+
     flags = []
     if hba1c >= 6.5:
         flags.append(f"the HbA1c of {hba1c}% is above the 6.5% diabetic threshold")
     elif hba1c >= 5.7:
         flags.append(f"HbA1c is sitting at {hba1c}%, which is in the pre-diabetic range")
-    
+
     if glucose_fasting >= 126:
         flags.append(f"fasting glucose of {glucose_fasting} mg/dL is above the 126 mg/dL cutoff")
     elif glucose_fasting >= 100:
         flags.append(f"fasting glucose of {glucose_fasting} mg/dL is slightly elevated")
-    
+
     if bmi >= 30:
         flags.append(f"BMI of {bmi} puts them in the obese range")
     elif bmi >= 25:
         flags.append(f"BMI of {bmi} is a little above the healthy range")
-    
+
     if hypertension:
         flags.append("history of hypertension, which adds to the overall risk")
     if family_history:
         flags.append("family history of diabetes, so genetic risk is a factor")
     if smoking == 'Current':
         flags.append("current smoking is making things harder on insulin sensitivity")
-    
+
     if len(flags) == 1:
         lines.append(f"Worth noting that {flags[0]}.")
     elif len(flags) == 2:
         lines.append(f"A couple of things stand out: {flags[0]}, and {flags[1]}.")
     elif len(flags) >= 3:
         lines.append(f"A few things are worth flagging — {', '.join(flags[:-1])}, and {flags[-1]}.")
-    
+
     advice = []
     if physical_activity < 90:
         advice.append("getting more movement in, even just working up to 150 minutes a week makes a difference")
@@ -134,12 +140,12 @@ def generate_description(pred_label, cluster_name, bmi, hba1c, glucose_fasting,
         advice.append("getting more sleep")
     if bmi >= 25:
         advice.append("gradually working toward a healthier weight, even a 5–10% reduction has benefits")
-    
+
     if pred_label in ('Type 1', 'Type 2', 'Gestational'):
         lines.append("A proper consultation with a doctor should be the first step.")
     elif pred_label == 'Pre-Diabetes':
         lines.append("It's worth booking a follow-up with a GP for a test to get a clearer picture.")
-    
+
     if advice:
         if len(advice) == 1:
             lines.append(f"Beyond that, the main thing to focus on would be {advice[0]}.")
@@ -147,25 +153,25 @@ def generate_description(pred_label, cluster_name, bmi, hba1c, glucose_fasting,
             lines.append(f"On the lifestyle front, the biggest wins would come from {', '.join(advice[:-1])}, and {advice[-1]}.")
     elif pred_label == 'No Diabetes':
         lines.append("Keeping up the current habits and staying on top of routine check-ups is the main thing here.")
-    
+
     return ' '.join(lines)
 
+
 def encode_patient(data_dict, preprocessor_columns):
-    """Encode patient data to match preprocessor expected columns"""
     df_in = pd.DataFrame([data_dict])
-    
     for col in ['gender', 'ethnicity', 'education_level', 'income_level', 'employment_status', 'smoking_status']:
         if col in df_in.columns:
             df_in[col] = df_in[col].astype(str)
-    
     df_in = df_in.reindex(columns=preprocessor_columns, fill_value=0)
     return df_in
+
 
 def field(label_text, component):
     return html.Div([
         html.Label(label_text, className='field-label'),
         component,
     ], className='field-wrap')
+
 
 app.layout = html.Div([
     # Navbar
@@ -176,7 +182,7 @@ app.layout = html.Div([
         ], className='nav-brand'),
         html.Span('MLG 382 · Group 2', className='nav-tag'),
     ], className='app-nav'),
-    
+
     # Page body
     html.Div([
         html.Div([
@@ -185,14 +191,14 @@ app.layout = html.Div([
                 html.Span('Support System', className='title-accent'),
             ], className='page-title'),
         ], className='page-header'),
-        
+
         # Input card
         html.Div([
             html.Div([
                 html.Span('Patient Information', className='card-title-text'),
                 html.Span('Enter patient details to get a risk classification and lifestyle cluster.', className='card-title-sub'),
             ], className='card-title'),
-            
+
             html.Div([
                 # Demographics
                 html.Div([
@@ -235,7 +241,7 @@ app.layout = html.Div([
                         {'label': 'Current', 'value': 'Current'},
                     ], value='Never', clearable=False)),
                 ], className='form-col'),
-                
+
                 # Lifestyle
                 html.Div([
                     html.P('Lifestyle', className='section-label'),
@@ -246,7 +252,7 @@ app.layout = html.Div([
                     field('Screen Time (hours/day)', dbc.Input(id='screen_time', type='number', value=4.0, step=0.5)),
                     field('Diet Score (0–10)', dbc.Input(id='diet_score', type='number', value=5.0, step=0.1, min=0, max=10)),
                 ], className='form-col'),
-                
+
                 # Clinical
                 html.Div([
                     html.P('Clinical Measurements', className='section-label'),
@@ -265,18 +271,19 @@ app.layout = html.Div([
                     ], value=0, clearable=False)),
                 ], className='form-col'),
             ], className='form-grid'),
-            
+
             html.Div(className='form-divider'),
-            
+
             html.Div([
                 dbc.Button('Run Prediction', id='predict-btn', color='primary', className='predict-btn'),
             ], className='form-footer'),
         ], className='input-card'),
-        
+
         # Results
         html.Div(id='results-section', className='mt-4'),
     ], className='page-body'),
 ])
+
 
 @app.callback(
     Output('results-section', 'children'),
@@ -307,7 +314,7 @@ def predict(n_clicks, age, gender, ethnicity, education, income, employment, smo
             bmi, physical_activity, sleep_hours, alcohol, screen_time,
             diet_score, systolic_bp, diastolic_bp, glucose_fasting,
             hba1c, waist_hip, family_history, hypertension):
-    
+
     preprocessor_columns = [
         'Age',
         'gender', 'ethnicity', 'education_level', 'income_level',
@@ -319,7 +326,7 @@ def predict(n_clicks, age, gender, ethnicity, education, income, employment, smo
         'cholesterol_total', 'hdl_cholesterol', 'ldl_cholesterol', 'triglycerides',
         'glucose_fasting', 'glucose_postprandial', 'insulin_level', 'hba1c'
     ]
-    
+
     patient = {
         'Age': int(age) if age else 45,
         'gender': str(gender) if gender else 'Male',
@@ -350,24 +357,27 @@ def predict(n_clicks, age, gender, ethnicity, education, income, employment, smo
         'insulin_level': 10.0,
         'hba1c': hba1c if hba1c else 5.5,
     }
-    
+
     try:
         X_input = encode_patient(patient, preprocessor_columns)
         X_processed = preprocessor.transform(X_input)
-        
+
         # Predict
         pred_idx = model.predict(X_processed)[0]
         pred_label = le.inverse_transform([pred_idx])[0]
         proba = model.predict_proba(X_processed)[0]
         classes = le.classes_
-        
+
+        # ── Dynamic Risk Level ─────────────────────────────────────────────────
+        risk_label, risk_color = RISK_LEVELS.get(pred_label, ('Unknown', '#2563eb'))
+
         # Generate description
         description = generate_description(
             pred_label, CLUSTER_LABELS.get(0, 'Unknown'), bmi, hba1c, glucose_fasting,
             physical_activity, diet_score, sleep_hours,
             smoking, family_history, hypertension
         )
-        
+
         # Probability chart
         proba_fig = go.Figure(go.Bar(
             x=list(classes),
@@ -385,13 +395,13 @@ def predict(n_clicks, age, gender, ethnicity, education, income, employment, smo
             margin=dict(t=40, b=40, l=40, r=20),
             font=dict(family='Inter, sans-serif', size=12),
         )
-        
+
         # Feature importance chart
         importances = model.feature_importances_
         indices = np.argsort(importances)[::-1][:10]
         top_features = [preprocessor_columns[i] for i in indices if i < len(preprocessor_columns)]
         top_vals = [importances[i] for i in indices if i < len(preprocessor_columns)]
-        
+
         importance_fig = go.Figure(go.Bar(
             x=top_vals[::-1],
             y=top_features[::-1],
@@ -405,16 +415,16 @@ def predict(n_clicks, age, gender, ethnicity, education, income, employment, smo
             margin=dict(t=40, b=40, l=40, r=20),
             font=dict(family='Inter, sans-serif', size=12),
         )
-        
+
         results = html.Div([
             html.Div('Results', className='card-title'),
-            
+
             # Description box
             html.Div([
                 html.P('Summary & Recommendations', className='desc-heading'),
                 html.P(description, className='desc-body'),
             ], className='desc-box'),
-            
+
             # Stat cards
             html.Div([
                 html.Div([
@@ -422,22 +432,24 @@ def predict(n_clicks, age, gender, ethnicity, education, income, employment, smo
                     html.Div(pred_label, className='stat-value', style={'color': STAGE_COLORS.get(pred_label, '#2563eb')}),
                     html.Span('XGBoost model', className='stat-sub'),
                 ], className='stat-card', style={'borderLeftColor': STAGE_COLORS.get(pred_label, '#2563eb')}),
+
+                # ── Dynamic Risk Level Card ────────────────────────────────────
                 html.Div([
                     html.P('Risk Level', className='stat-label'),
-                    html.Div('Moderate', className='stat-value', style={'color': '#d97706'}),
-                    html.Span('Based on inputs', className='stat-sub'),
-                ], className='stat-card', style={'borderLeftColor': '#d97706'}),
+                    html.Div(risk_label, className='stat-value', style={'color': risk_color}),
+                    html.Span('Based on prediction', className='stat-sub'),
+                ], className='stat-card', style={'borderLeftColor': risk_color}),
             ], className='stat-row'),
-            
+
             # Charts
             dbc.Row([
                 dbc.Col([dcc.Graph(figure=proba_fig)], md=6),
                 dbc.Col([dcc.Graph(figure=importance_fig)], md=6),
             ], className='mt-3'),
         ], className='results-card')
-        
+
         return results
-    
+
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()
@@ -449,6 +461,7 @@ def predict(n_clicks, age, gender, ethnicity, education, income, employment, smo
                 html.Pre(error_details, style={'background': '#f8f8f8', 'padding': '10px', 'font-size': '12px', 'color': 'red'}),
             ], className='desc-box'),
         ], className='results-card')
+
 
 if __name__ == '__main__':
     app.run(debug=True)
