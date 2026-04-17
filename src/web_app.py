@@ -11,7 +11,7 @@ SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.path.dirname(SRC_DIR)
 
 model = joblib.load(os.path.join(BASE_DIR, 'artifacts', 'model_xgb.pkl'))
-shap_data = pd.read_csv(os.path.join(BASE_DIR, 'artifacts', 'shap_values.csv'))
+#shap_data = pd.read_csv(os.path.join(BASE_DIR, 'artifacts', 'shap_values.csv'))
 preprocessor = joblib.load(os.path.join(BASE_DIR, 'artifacts', 'preprocessor.pkl'))
 cluster_profiles = pd.read_csv(os.path.join(BASE_DIR, 'artifacts', 'cluster_profiles.csv'))
 
