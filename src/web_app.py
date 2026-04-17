@@ -12,6 +12,8 @@ BASE_DIR = os.path.dirname(SRC_DIR)
 
 model = joblib.load(os.path.join(BASE_DIR, 'artifacts', 'model_xgb.pkl'))
 preprocessor = joblib.load(os.path.join(BASE_DIR, 'artifacts', 'preprocessor.pkl'))
+kmeans_model = joblib.load(os.path.join(BASE_DIR, 'artifacts', 'kmeans_model.pkl'))
+cluster_scaler = joblib.load(os.path.join(BASE_DIR, 'artifacts', 'cluster_scaler.pkl'))
 cluster_profiles = pd.read_csv(os.path.join(BASE_DIR, 'artifacts', 'cluster_profiles.csv'))
 
 data_paths = [
@@ -42,7 +44,7 @@ if data_path is None:
     processed_dir = os.path.join(BASE_DIR, 'data', 'processed')
     print(f"\nFiles in data/raw/: {os.listdir(raw_dir) if os.path.exists(raw_dir) else 'N/A'}")
     print(f"Files in data/processed/: {os.listdir(processed_dir) if os.path.exists(processed_dir) else 'N/A'}")
-    raise FileNotFoundError(f"Could not find Diabetes dataset. Check data/raw/ and data/processed/ folders.")
+    raise FileNotFoundError(f"Could not find Diabetes dataset.")
 
 df = pd.read_csv(data_path)
 df.columns = df.columns.str.lower().str.replace(' ', '_')
@@ -51,8 +53,16 @@ TARGET = 'diabetes_stage'
 le = LabelEncoder()
 le.fit(df[TARGET])
 
-CLUSTER_LABELS = {0: 'Active & Healthy', 1: 'Sedentary Risk', 2: 'Moderate Lifestyle'}
-CLUSTER_COLORS = {0: '#16a34a', 1: '#dc2626', 2: '#d97706'}
+CLUSTER_LABELS = {
+    0: 'Active Lower-Risk Profile',
+    1: 'Glucose-Elevated High-Risk Profile',
+    2: 'Cardiometabolic Risk Profile'
+}
+CLUSTER_COLORS = {
+    0: '#16a34a',
+    1: '#dc2626',
+    2: '#d97706'
+}
 STAGE_COLORS = {
     'No Diabetes':  '#16a34a',
     'Pre-Diabetes': '#d97706',
@@ -60,8 +70,6 @@ STAGE_COLORS = {
     'Type 2':       '#dc2626',
     'Gestational':  '#7c3aed',
 }
-
-# ── Risk Level Mapping ─────────────────────────────────────────────────────────
 RISK_LEVELS = {
     'No Diabetes':  ('Low',       '#16a34a'),
     'Pre-Diabetes': ('Medium',    '#d97706'),
@@ -70,6 +78,16 @@ RISK_LEVELS = {
     'Gestational':  ('High',      '#7c3aed'),
 }
 
+# ── Clustering Features ────────────────────────────────────────────────────────
+CLUSTER_FEATURES = [
+    'Age', 'alcohol_consumption_per_week', 'physical_activity_minutes_per_week',
+    'diet_score', 'sleep_hours_per_day', 'screen_time_hours_per_day',
+    'bmi', 'waist_to_hip_ratio', 'systolic_bp', 'diastolic_bp',
+    'cholesterol_total', 'hdl_cholesterol', 'ldl_cholesterol',
+    'triglycerides', 'glucose_fasting', 'glucose_postprandial',
+    'insulin_level', 'hba1c'
+]
+
 app = Dash(
     __name__,
     external_stylesheets=[dbc.themes.BOOTSTRAP],
@@ -77,6 +95,7 @@ app = Dash(
 )
 app.title = 'Diabetes Decision Support System'
 server = app.server
+
 
 def generate_description(pred_label, cluster_name, bmi, hba1c, glucose_fasting,
                          physical_activity, diet_score, sleep_hours,
@@ -94,10 +113,12 @@ def generate_description(pred_label, cluster_name, bmi, hba1c, glucose_fasting,
     else:
         lines = ["A risk classification has been made based on the data provided."]
 
-    if cluster_name == 'Active & Healthy':
+    if cluster_name == 'Active Lower-Risk Profile':
         lines.append("On the lifestyle side, things look good. The activity levels and general habits are a positive sign.")
-    elif cluster_name == 'Sedentary Risk':
-        lines.append("The lifestyle concerns. Low activity and sedentary patterns are one of the bigger drivers of metabolic risk.")
+    elif cluster_name == 'Glucose-Elevated High-Risk Profile':
+        lines.append("Glucose markers are elevated and lifestyle patterns suggest high metabolic risk — immediate clinical attention is recommended.")
+    elif cluster_name == 'Cardiometabolic Risk Profile':
+        lines.append("The lifestyle concerns. Low activity and sedentary patterns combined with cardiometabolic markers are significant risk drivers.")
     else:
         lines.append("Lifestyle-wise, things are somewhere in the middle — okay but definitely room for improvement.")
 
@@ -106,17 +127,14 @@ def generate_description(pred_label, cluster_name, bmi, hba1c, glucose_fasting,
         flags.append(f"the HbA1c of {hba1c}% is above the 6.5% diabetic threshold")
     elif hba1c >= 5.7:
         flags.append(f"HbA1c is sitting at {hba1c}%, which is in the pre-diabetic range")
-
     if glucose_fasting >= 126:
         flags.append(f"fasting glucose of {glucose_fasting} mg/dL is above the 126 mg/dL cutoff")
     elif glucose_fasting >= 100:
         flags.append(f"fasting glucose of {glucose_fasting} mg/dL is slightly elevated")
-
     if bmi >= 30:
         flags.append(f"BMI of {bmi} puts them in the obese range")
     elif bmi >= 25:
         flags.append(f"BMI of {bmi} is a little above the healthy range")
-
     if hypertension:
         flags.append("history of hypertension, which adds to the overall risk")
     if family_history:
@@ -166,6 +184,14 @@ def encode_patient(data_dict, preprocessor_columns):
     return df_in
 
 
+def assign_cluster(patient_dict):
+    cluster_input = pd.DataFrame([[patient_dict.get(f, 0) for f in CLUSTER_FEATURES]],
+                                  columns=CLUSTER_FEATURES)
+    cluster_scaled = cluster_scaler.transform(cluster_input)
+    cluster_id = int(kmeans_model.predict(cluster_scaled)[0])
+    return cluster_id
+
+
 def field(label_text, component):
     return html.Div([
         html.Label(label_text, className='field-label'),
@@ -183,7 +209,6 @@ app.layout = html.Div([
         html.Span('MLG 382 · Group 2', className='nav-tag'),
     ], className='app-nav'),
 
-    # Page body
     html.Div([
         html.Div([
             html.H1([
@@ -316,8 +341,7 @@ def predict(n_clicks, age, gender, ethnicity, education, income, employment, smo
             hba1c, waist_hip, family_history, hypertension):
 
     preprocessor_columns = [
-        'Age',
-        'gender', 'ethnicity', 'education_level', 'income_level',
+        'Age', 'gender', 'ethnicity', 'education_level', 'income_level',
         'employment_status', 'smoking_status',
         'alcohol_consumption_per_week', 'physical_activity_minutes_per_week',
         'diet_score', 'sleep_hours_per_day', 'screen_time_hours_per_day',
@@ -362,18 +386,21 @@ def predict(n_clicks, age, gender, ethnicity, education, income, employment, smo
         X_input = encode_patient(patient, preprocessor_columns)
         X_processed = preprocessor.transform(X_input)
 
-        # Predict
+        # ── Risk Classification ────────────────────────────────────────────────
         pred_idx = model.predict(X_processed)[0]
         pred_label = le.inverse_transform([pred_idx])[0]
         proba = model.predict_proba(X_processed)[0]
         classes = le.classes_
-
-        # ── Dynamic Risk Level ─────────────────────────────────────────────────
         risk_label, risk_color = RISK_LEVELS.get(pred_label, ('Unknown', '#2563eb'))
+
+        # ── Cluster Assignment ─────────────────────────────────────────────────
+        cluster_id = assign_cluster(patient)
+        cluster_name = CLUSTER_LABELS.get(cluster_id, 'Unknown')
+        cluster_color = CLUSTER_COLORS.get(cluster_id, '#2563eb')
 
         # Generate description
         description = generate_description(
-            pred_label, CLUSTER_LABELS.get(0, 'Unknown'), bmi, hba1c, glucose_fasting,
+            pred_label, cluster_name, bmi, hba1c, glucose_fasting,
             physical_activity, diet_score, sleep_hours,
             smoking, family_history, hypertension
         )
@@ -433,12 +460,18 @@ def predict(n_clicks, age, gender, ethnicity, education, income, employment, smo
                     html.Span('XGBoost model', className='stat-sub'),
                 ], className='stat-card', style={'borderLeftColor': STAGE_COLORS.get(pred_label, '#2563eb')}),
 
-                # ── Dynamic Risk Level Card ────────────────────────────────────
                 html.Div([
                     html.P('Risk Level', className='stat-label'),
                     html.Div(risk_label, className='stat-value', style={'color': risk_color}),
                     html.Span('Based on prediction', className='stat-sub'),
                 ], className='stat-card', style={'borderLeftColor': risk_color}),
+
+                # ── Cluster Assignment Card ────────────────────────────────────
+                html.Div([
+                    html.P('Lifestyle Cluster', className='stat-label'),
+                    html.Div(cluster_name, className='stat-value', style={'color': cluster_color, 'fontSize': '16px'}),
+                    html.Span('K-Means segmentation', className='stat-sub'),
+                ], className='stat-card', style={'borderLeftColor': cluster_color}),
             ], className='stat-row'),
 
             # Charts
@@ -446,6 +479,59 @@ def predict(n_clicks, age, gender, ethnicity, education, income, employment, smo
                 dbc.Col([dcc.Graph(figure=proba_fig)], md=6),
                 dbc.Col([dcc.Graph(figure=importance_fig)], md=6),
             ], className='mt-3'),
+
+            # ── SHAP Visualisations ────────────────────────────────────────────
+            html.Div([
+                html.H4('SHAP Analysis — Key Drivers of Risk', style={
+                    'marginTop': '30px',
+                    'marginBottom': '15px',
+                    'fontWeight': 'bold',
+                    'color': '#1e3a5f'
+                }),
+
+                html.P(
+                    'SHAP (Shapley Additive Explanations) values show which features most strongly '
+                    'influence the model\'s predictions globally and for individual patients.',
+                    style={'color': '#555', 'marginBottom': '20px'}
+                ),
+
+                dbc.Row([
+                    dbc.Col([
+                        html.P('Global Feature Importance (Bar)', className='desc-heading'),
+                        html.Img(src='/assets/shap_bar.png', style={'width': '100%', 'borderRadius': '8px'}),
+                    ], md=6),
+                    dbc.Col([
+                        html.P('Global Feature Importance (Beeswarm)', className='desc-heading'),
+                        html.Img(src='/assets/shap_beeswarm.png', style={'width': '100%', 'borderRadius': '8px'}),
+                    ], md=6),
+                ], className='mt-2'),
+
+                dbc.Row([
+                    dbc.Col([
+                        html.P('Local Explanation — Patient Level (Waterfall)', className='desc-heading'),
+                        html.Img(src='/assets/shap_waterfall.png', style={'width': '100%', 'borderRadius': '8px'}),
+                    ], md=6),
+                    dbc.Col([
+                        html.P('Cluster Feature Importance (K-Means)', className='desc-heading'),
+                        html.Img(src='/assets/shap_cluster_bar.png', style={'width': '100%', 'borderRadius': '8px'}),
+                    ], md=6),
+                ], className='mt-3'),
+
+                dbc.Row([
+                    dbc.Col([
+                        html.P('Patient Cluster Visualisation (PCA)', className='desc-heading'),
+                        html.Img(src='/assets/cluster_pca.png', style={'width': '100%', 'borderRadius': '8px'}),
+                    ], md=12),
+                ], className='mt-3'),
+
+            ], style={
+                'background': 'white',
+                'borderRadius': '12px',
+                'padding': '24px',
+                'marginTop': '20px',
+                'boxShadow': '0 2px 8px rgba(0,0,0,0.08)'
+            }),
+
         ], className='results-card')
 
         return results
