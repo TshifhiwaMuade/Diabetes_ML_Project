@@ -57,11 +57,64 @@ clusters = kmeans.fit_predict(X_scaled)
 pca = PCA(n_components=2)
 X_pca = pca.fit_transform(X_scaled)
 
-# create cluster name mapping
+# derive cluster name mapping from fitted cluster profiles instead of
+# hard-coding numeric KMeans labels, which are arbitrary
+centers_original_scale = scaler.inverse_transform(kmeans.cluster_centers_)
+cluster_centers = pd.DataFrame(centers_original_scale, columns=selected_features)
+cluster_centers["cluster"] = range(kmeans.n_clusters)
+
+higher_is_healthier = [
+    "physical_activity_minutes_per_week",
+    "diet_score",
+    "sleep_hours_per_day",
+    "hdl_cholesterol"
+]
+lower_is_healthier = [
+    "Age",
+    "alcohol_consumption_per_week",
+    "screen_time_hours_per_day",
+    "bmi",
+    "waist_to_hip_ratio",
+    "systolic_bp",
+    "diastolic_bp",
+    "cholesterol_total",
+    "ldl_cholesterol",
+    "triglycerides",
+    "glucose_fasting",
+    "glucose_postprandial",
+    "insulin_level",
+    "hba1c"
+]
+glucose_risk_features = [
+    "glucose_fasting",
+    "glucose_postprandial",
+    "insulin_level",
+    "hba1c"
+]
+
+cluster_centers["overall_risk_score"] = (
+    cluster_centers[lower_is_healthier].mean(axis=1) -
+    cluster_centers[higher_is_healthier].mean(axis=1)
+)
+cluster_centers["glucose_risk_score"] = cluster_centers[glucose_risk_features].mean(axis=1)
+
+lower_risk_cluster = cluster_centers.loc[
+    cluster_centers["overall_risk_score"].idxmin(), "cluster"
+]
+remaining_clusters = cluster_centers.loc[
+    cluster_centers["cluster"] != lower_risk_cluster
+].copy()
+glucose_elevated_cluster = remaining_clusters.loc[
+    remaining_clusters["glucose_risk_score"].idxmax(), "cluster"
+]
+cardiometabolic_cluster = remaining_clusters.loc[
+    remaining_clusters["cluster"] != glucose_elevated_cluster, "cluster"
+].iloc[0]
+
 cluster_names = {
-    0: "active lower-risk profile",
-    1: "glucose-elevated high-risk profile",
-    2: "cardiometabolic risk profile"
+    int(lower_risk_cluster): "active lower-risk profile",
+    int(glucose_elevated_cluster): "glucose-elevated high-risk profile",
+    int(cardiometabolic_cluster): "cardiometabolic risk profile"
 }
 
 # evaluate clustering
