@@ -92,6 +92,7 @@ print(cluster_profiles)
 # create pca plot
 plt.figure(figsize=(8, 6))
 scatter = plt.scatter(X_pca[:, 0], X_pca[:, 1], c=clusters)
+plt.colorbar(scatter, label="cluster")
 plt.title("patient clusters (pca projection)")
 plt.xlabel("pca 1")
 plt.ylabel("pca 2")
